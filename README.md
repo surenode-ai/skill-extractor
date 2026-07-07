@@ -1,5 +1,7 @@
 # skill-extractor
 
+[![ci](https://github.com/surenode-ai/skill-extractor/actions/workflows/ci.yml/badge.svg)](https://github.com/surenode-ai/skill-extractor/actions/workflows/ci.yml)
+
 Mine **reusable skills** from your coding agents' transcripts. Works with
 **Claude Code**, **OpenAI Codex CLI**, and **any other agent** via a small
 exporter. Every candidate is scored by **confidence** and **utility**, weighted
