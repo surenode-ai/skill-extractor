@@ -9,39 +9,29 @@ edit, or reject each one from a **VS Code panel** or the **`/review-skills`**
 command. Approved skills are written as real `SKILL.md` files; every candidate,
 approved or not, is kept so mining keeps improving.
 
-## Why this exists
+## Why I built skill-extractor
 
-Every session with a coding agent produces two things: the work, and the
-knowledge of how the work got done. The work survives. The knowledge
-evaporates.
+Every session with my coding agent ended the same way: the work survived, the
+knowledge evaporated. I was re-teaching the same lessons, re-debugging solved
+problems, repeating the same standing instructions. The ecosystem's fix is
+skills, but nobody writes them by hand, and the platforms' fix is built-in
+memory: the agent quietly learns from your sessions and its future behavior
+changes without you ever seeing what it learned. I wouldn't have been able to
+sleep with that loop running invisibly over transcripts that contain my code,
+my infrastructure, my mistakes, and occasionally my pasted secrets.
 
-You spend forty minutes with your agent finding why parallel tests are flaky,
-and the fix (bind test servers to port 0) is exactly the kind of thing that
-will be needed again, in another repo, three weeks from now, when neither you
-nor the agent remembers this session existed. You correct the agent for the
-fifth time: run the tests yourself before telling me it is done. That standing
-instruction lives in your patience, not in the agent. A failed approach taught
-you what to avoid; nothing wrote that down.
+skill-extractor is the same learning loop with every link made inspectable.
+The whole engine is 2,137 lines of dependency-free Python in four files; you
+can read all of it in an afternoon. It runs entirely on your machine, its
+state is plain JSONL you can `cat`, secrets are redacted before any excerpt
+reaches a model, and nothing becomes a persistent instruction until it passes
+a risk lint and you approve it as a plain markdown file you can open, edit,
+or delete.
 
-Skills are the fix the ecosystem has converged on: durable `SKILL.md`
-instructions the agent loads in future sessions. But almost nobody writes
-them, for the same reason nobody writes documentation after the task is
-finished. You do not notice your own repeated patterns, and the moment the
-problem is solved, the incentive to write anything is gone.
-
-skill-extractor closes the loop with what you already have. Your transcripts
-are sitting on disk, containing the evidence of what worked and what did not.
-The miner reads them incrementally, extracts candidate skills (techniques,
-workflows, standing preferences, guardrails learned from failures), scores
-each by whether the trace it came from actually succeeded, and surfaces only
-the strong, novel ones for your review. You approve, edit, or reject. Approved
-skills make your agent better next session; rejections teach the miner your
-taste.
-
-The result: your agent compounds. Work you already did this week quietly
-becomes capability you keep. For one developer this is a compounding personal
-toolkit; for a team it is raw material for a shared, governed skill catalog
-(see [Using this on a team?](#using-this-on-a-team) below).
+The result: your agent compounds, and you can audit exactly how. For one
+developer that is a personal toolkit that grows out of work you already did;
+for a team it is raw material for a shared, governed skill catalog (see
+[Using this on a team?](#using-this-on-a-team)).
 
 ## Security model: read this before installing
 
