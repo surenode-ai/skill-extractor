@@ -107,7 +107,8 @@ Key API (all in `lib.py`; signatures stable within a major version):
 | `build_learning_context() -> str` | few-shot calibration block from user decisions |
 | `learned_priors() -> dict` | per-category approval rates + tag affinity |
 | `rebuild_pending() -> list[dict]` | recompute the deduped, capped review queue |
-| `install_skill(cand) -> str` | write `~/.claude/skills/<name>/SKILL.md` |
+| `risk_findings(cand) -> list[str]` | risk-lint labels for a candidate's instruction fields ([] when clean) |
+| `install_skill(cand, acknowledge_risk=False) -> str` | write `~/.claude/skills/<name>/SKILL.md`; raises `RiskAcknowledgementRequired` for flagged candidates without an acknowledgement |
 | `append_candidate / read_candidates / append_decision / read_decisions` | state I/O |
 | `RUN_USAGE`, `reset_run_usage()`, `usage_totals(prefix)` | token/cost accounting (§6) |
 
