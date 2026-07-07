@@ -11,26 +11,26 @@ approved or not, is kept so mining keeps improving.
 
 ## Why I built skill-extractor
 
-Every session with my coding agent ended the same way: the work survived, the
-knowledge evaporated. I was re-teaching the same lessons, re-debugging solved
-problems, repeating the same standing instructions. The ecosystem's fix is
-skills, but nobody writes them by hand, and the platforms' fix is built-in
-memory: the agent quietly learns from your sessions and its future behavior
-changes without you ever seeing what it learned. I wouldn't have been able to
-sleep with that loop running invisibly over transcripts that contain my code,
-my infrastructure, my mistakes, and occasionally my pasted secrets.
+I kept telling my coding agent the same things. Run the tests before you say
+it's done. Stop hardcoding ports in parallel test suites. Fixes we had already
+worked out together were gone by the next session. Skills solve exactly this,
+but writing a skill by hand after finishing a task is the kind of thing nobody
+actually does.
 
-skill-extractor is the same learning loop with every link made inspectable.
-The whole engine is 2,137 lines of dependency-free Python in four files; you
-can read all of it in an afternoon. It runs entirely on your machine, its
-state is plain JSONL you can `cat`, secrets are redacted before any excerpt
-reaches a model, and nothing becomes a persistent instruction until it passes
-a risk lint and you approve it as a plain markdown file you can open, edit,
-or delete.
+Agent platforms answer with built-in memory: the agent learns from your
+sessions and its behavior changes, and you don't see what it learned. I
+wouldn't have been able to sleep with that running over transcripts that
+contain my code, my infrastructure, and occasionally my pasted secrets.
 
-The result: your agent compounds, and you can audit exactly how. For one
-developer that is a personal toolkit that grows out of work you already did;
-for a team it is raw material for a shared, governed skill catalog (see
+skill-extractor does the learning where you can watch it. The engine is 2,137
+lines of dependency-free Python in four files; you can read all of it in an
+afternoon. It runs on your machine, its state is plain JSONL you can `cat`,
+secrets are redacted before anything reaches a model, and nothing becomes a
+persistent instruction until it passes a risk lint and you approve it as a
+markdown file you can open, edit, or delete.
+
+For one developer this is a toolkit that grows out of work you already did.
+For a team it is raw material for a shared, governed skill catalog (see
 [Using this on a team?](#using-this-on-a-team)).
 
 ## Security model: read this before installing
