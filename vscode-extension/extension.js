@@ -160,29 +160,32 @@ function openPanel(context) {
   panel.webview.onDidReceiveMessage(async (msg) => {
     try {
       if (msg.type === "install") {
-        const tmp = writeEdits(msg.edits);
-        let res = await review(["install", msg.id, "--edits", tmp, "--comment", msg.comment || ""]);
-        if (res && res.error === "risky") {
-          // The risk lint flagged instruction patterns: require an explicit,
-          // modal acknowledgement before the skill becomes a live instruction.
-          const choice = await vscode.window.showWarningMessage(
-            `This skill body was flagged by the risk lint: ${(res.risk || []).join(", ")}. ` +
-            "Installing makes it a persistent agent instruction.",
-            { modal: true },
-            "Install anyway"
-          );
-          if (choice === "Install anyway") {
+        const { tmpDir, tmp } = writeEdits(msg.edits);
+        try {
+          let res = await review(["install", msg.id, "--edits", tmp, "--comment", msg.comment || ""]);
+          if (res && res.error === "risky") {
+            // The risk lint flagged instruction patterns: require an explicit,
+            // modal acknowledgement before the skill becomes a live instruction.
+            const choice = await vscode.window.showWarningMessage(
+              `This skill body was flagged by the risk lint: ${(res.risk || []).join(", ")}. ` +
+              "Installing makes it a persistent agent instruction.",
+              { modal: true },
+              "Install anyway"
+            );
+            if (choice !== "Install anyway") {
+              refreshPanel();
+              return;
+            }
             res = await review(["install", msg.id, "--edits", tmp,
                                 "--comment", msg.comment || "", "--acknowledge-risk"]);
-          } else {
-            fs.unlinkSync(tmp);
-            refreshPanel();
-            return;
           }
+          vscode.window.showInformationMessage(`Installed skill: ${res.name} → ${res.path}`);
+          refreshPanel();
+        } finally {
+          // Edits can contain the (transcript-derived) skill body: always clean
+          // up, even when review.py fails mid-way.
+          try { fs.unlinkSync(tmp); fs.rmdirSync(tmpDir); } catch (e) { /* best-effort */ }
         }
-        fs.unlinkSync(tmp);
-        vscode.window.showInformationMessage(`Installed skill: ${res.name} → ${res.path}`);
-        refreshPanel();
       } else if (msg.type === "reject") {
         await review(["reject", msg.id, "--comment", msg.comment || ""]);
         vscode.window.showInformationMessage("Skill rejected (kept in scratch for future learning).");
@@ -199,9 +202,11 @@ function openPanel(context) {
 }
 
 function writeEdits(edits) {
-  const tmp = path.join(os.tmpdir(), `skill-edit-${Date.now()}.json`);
-  fs.writeFileSync(tmp, JSON.stringify(edits || {}));
-  return tmp;
+  // Unpredictable private dir + 0600 file: the edited body is transcript-derived.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "skill-edit-"));
+  const tmp = path.join(tmpDir, "edits.json");
+  fs.writeFileSync(tmp, JSON.stringify(edits || {}), { mode: 0o600 });
+  return { tmpDir, tmp };
 }
 
 async function refreshPanel() {

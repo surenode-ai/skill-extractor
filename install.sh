@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Skill Extractor installer. Idempotent — safe to re-run after edits.
 set -euo pipefail
+umask 077   # everything this installer creates is private to the user
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENGINE="$REPO/engine"
@@ -21,6 +22,7 @@ echo "  python: $PY"
 
 # 1) State dirs -------------------------------------------------------------
 mkdir -p "$STATE_DIR" "$STATE_ROOT/logs" "$SKILLS_DIR" "$LA_DIR"
+chmod 700 "$STATE_ROOT" "$STATE_DIR" "$STATE_ROOT/logs"
 
 # 2) Extension config (read by the VS Code extension & the review skill) -----
 cat > "$STATE_ROOT/extension-config.json" <<JSON
@@ -30,6 +32,7 @@ cat > "$STATE_ROOT/extension-config.json" <<JSON
   "repo": "$REPO"
 }
 JSON
+chmod 600 "$STATE_ROOT/extension-config.json"
 echo "  ✓ wrote extension-config.json"
 
 # 3) Install the /review-skills skill ---------------------------------------
@@ -71,6 +74,10 @@ with open(plist, "wb") as fh:
     plistlib.dump(data, fh)
 PYEOF
 
+# Logs can carry transcript-derived error text: create them private BEFORE
+# launchd or the initial background run can create them with a wider mode.
+touch "$STATE_ROOT/logs/launchd.out.log" "$STATE_ROOT/logs/launchd.err.log" "$STATE_ROOT/logs/run.log"
+chmod 600 "$STATE_ROOT/logs/launchd.out.log" "$STATE_ROOT/logs/launchd.err.log" "$STATE_ROOT/logs/run.log"
 launchctl unload "$PLIST" 2>/dev/null || true
 launchctl load "$PLIST"
 echo "  ✓ loaded launchd timer ($PLIST_LABEL, every ${INTERVAL}s)"

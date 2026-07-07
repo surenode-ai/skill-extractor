@@ -59,4 +59,6 @@ for raw in mined:
     print(f"  {raw.get('description','')}")
     print(f"  scores: {json.dumps(score)}")
     # To persist into the shared store instead:  lib.append_candidate({...})
-    # To install directly as a SKILL.md:         lib.install_skill(raw)
+    # To install as a SKILL.md (the risk gate is enforced inside install_skill;
+    # show lib.risk_findings(raw) to your user before acknowledging):
+    #   lib.install_skill(raw, acknowledge_risk=<human saw the findings>)

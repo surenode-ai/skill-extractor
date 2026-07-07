@@ -94,8 +94,15 @@ def ensure_dirs() -> None:
 
 
 def _append_private(path: str, line: str) -> None:
-    """Append one line, creating the file 0600 (state can hold sensitive text)."""
+    """Append one line, creating the file 0600 (state can hold sensitive text).
+    Pre-existing files are re-tightened too: the creation mode only applies to
+    new files, and a file first created by something else (shell redirection,
+    launchd) may have started wider."""
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
     try:
         os.write(fd, (line + "\n").encode("utf-8", errors="replace"))
     finally:
@@ -762,11 +769,14 @@ def mine_segment(seg: Segment, cfg: dict, learning: str = "") -> list[dict]:
     next model in the chain.
     """
     segment_text = seg.render(cfg["max_segment_chars"])
+    prompt = render_mine_prompt(segment_text, learning)
+    # Redact the FULLY RENDERED prompt, not just the segment: the learning
+    # context carries prior decision comments and candidate text, which can
+    # themselves contain secret-like values.
     if cfg.get("redact_secrets", True):
-        segment_text, n_redacted = redact_text(segment_text)
+        prompt, n_redacted = redact_text(prompt)
         if n_redacted:
             log(f"  redacted {n_redacted} secret-like value(s) before mining")
-    prompt = render_mine_prompt(segment_text, learning)
     for model in model_chain(cfg):
         out = _call_llm(prompt, model, cfg)
         if out is None:
@@ -1188,12 +1198,33 @@ def risk_findings(cand: dict) -> list[str]:
     return hits
 
 
-def install_skill(cand: dict) -> str:
+class RiskAcknowledgementRequired(ValueError):
+    """Raised by install_skill() for a risk-flagged candidate installed without
+    an explicit acknowledgement. ``findings`` carries the risk labels."""
+
+    def __init__(self, findings: list):
+        self.findings = list(findings)
+        super().__init__(
+            "candidate flagged by the risk lint (" + ", ".join(self.findings) +
+            "); pass acknowledge_risk=True after a human has reviewed the body")
+
+
+def install_skill(cand: dict, acknowledge_risk: bool = False) -> str:
     """Write the candidate as a SKILL.md. Returns the install path.
 
-    Refuses to write through symlinks: a linked ``<slug>/`` or ``SKILL.md``
-    would let a prior local write redirect the install anywhere the user can
-    write."""
+    THE risk gate lives here, not only in the CLIs: a mined skill is model
+    output that becomes a persistent agent instruction, so a risk-flagged
+    candidate raises :class:`RiskAcknowledgementRequired` unless the caller
+    passes ``acknowledge_risk=True`` on behalf of a human who has seen the
+    findings. Every caller (review.py, the VS Code panel, third-party
+    embedders per INTEGRATION.md) inherits the gate by construction.
+
+    Also refuses to write through symlinks: a linked ``<slug>/`` or
+    ``SKILL.md`` would let a prior local write redirect the install anywhere
+    the user can write."""
+    risks = risk_findings(cand)
+    if risks and not acknowledge_risk:
+        raise RiskAcknowledgementRequired(risks)
     ensure_dirs()
     name = slugify(cand.get("name", "mined-skill"))
     dest_dir = os.path.join(SKILLS_DIR, name)

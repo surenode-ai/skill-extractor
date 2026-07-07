@@ -81,7 +81,14 @@ for seg in segments:
         # persist however you like, or lib.append_candidate({...})
 
 # when your user approves:
-path = lib.install_skill(candidate_dict)          # writes SKILL.md, returns path
+# install_skill() enforces the risk gate: a flagged candidate raises
+# lib.RiskAcknowledgementRequired unless a human has seen the findings.
+risks = lib.risk_findings(candidate_dict)         # [] when clean
+path = lib.install_skill(candidate_dict,
+                         acknowledge_risk=bool(risks))  # only after showing `risks` to the user!
+lib.append_decision({"id": candidate_dict.get("id"), "action": "install",
+                     "risk": risks, "risk_acknowledged": bool(risks),
+                     "path": path})                # keep the audit trail intact
 ```
 
 Key API (all in `lib.py`; signatures stable within a major version):

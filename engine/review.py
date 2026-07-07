@@ -90,6 +90,8 @@ def cmd_install(args) -> None:
     # A candidate is model output about to become a persistent agent
     # instruction: risky instruction patterns require an explicit, per-install
     # acknowledgement, not a skimmed click.
+    # The authoritative gate lives in lib.install_skill(); this pre-check only
+    # shapes the JSON error for UIs.
     risks = lib.risk_findings(c)
     if risks and not args.acknowledge_risk:
         print(json.dumps({
@@ -100,7 +102,7 @@ def cmd_install(args) -> None:
                     "to accept these patterns",
         }, indent=2))
         sys.exit(3)
-    path = lib.install_skill(c)
+    path = lib.install_skill(c, acknowledge_risk=args.acknowledge_risk)
     lib.append_decision({
         "id": c["id"],
         "key": c.get("key"),
