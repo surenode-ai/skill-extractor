@@ -1,0 +1,5 @@
+skill-extractor
+Copyright 2026 Surenode
+
+Mines reusable skills from coding-agent transcripts (Claude Code, Codex CLI,
+or any agent via the canonical JSONL format).

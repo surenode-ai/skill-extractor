@@ -1,0 +1,40 @@
+{
+  "name": "claude-skill-extractor",
+  "displayName": "Claude Skill Extractor",
+  "description": "Reviews & installs skills mined from your Claude Code conversation traces.",
+  "version": "0.1.0",
+  "publisher": "surenode",
+  "engines": { "vscode": "^1.94.0" },
+  "categories": ["AI", "Other"],
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [
+      {
+        "command": "skillExtractor.review",
+        "title": "Skill Extractor: Review Discovered Skills",
+        "category": "Skill Extractor"
+      },
+      {
+        "command": "skillExtractor.runNow",
+        "title": "Skill Extractor: Run Miner Now",
+        "category": "Skill Extractor"
+      }
+    ],
+    "configuration": {
+      "title": "Claude Skill Extractor",
+      "properties": {
+        "skillExtractor.pollSeconds": {
+          "type": "number",
+          "default": 45,
+          "description": "How often (seconds) to check for newly discovered skills."
+        },
+        "skillExtractor.notify": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification popup when new skills are discovered."
+        }
+      }
+    }
+  }
+}

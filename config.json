@@ -1,0 +1,29 @@
+{
+  "model": "sonnet",
+  "model_fallbacks": [
+    "haiku"
+  ],
+  "scope": "all",
+  "min_confidence": 0.55,
+  "min_utility": 0.4,
+  "min_segment_chars": 700,
+  "max_segment_chars": 22000,
+  "max_segments_per_run": 8,
+  "mine_timeout_sec": 240,
+  "exclude_projects": [],
+  "min_tool_calls": 2,
+  "min_user_messages": 2,
+  "min_user_chars": 300,
+  "surface_threshold": 0.55,
+  "max_pending": 20,
+  "dedup_similarity": 0.5,
+  "max_tokens_per_run": 150000,
+  "max_usd_per_day": 2.0,
+  "sources": [
+    "claude_code"
+  ],
+  "mining_backend": "claude_cli",
+  "mining_command": null,
+  "codex_sessions_dir": null,
+  "jsonl_dirs": []
+}
