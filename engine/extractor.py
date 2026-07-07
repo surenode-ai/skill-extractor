@@ -113,6 +113,9 @@ def run(cfg: dict, full: bool = False, dry_run: bool = False) -> int:
     lib.ensure_dirs()
     lib.reset_run_usage()
     lib.log(f"=== extractor run (full={full} dry={dry_run}) ===")
+    if cfg.get("mining_backend") == "command" and cfg.get("max_usd_per_day"):
+        lib.log("  note: max_usd_per_day has NO effect on the command backend "
+                "(no cost envelope); max_segments_per_run is the spend cap")
     cursor = {} if full else lib.load_cursor()
     existing_keys = lib.existing_candidate_keys()
     installed = lib.installed_skill_names()

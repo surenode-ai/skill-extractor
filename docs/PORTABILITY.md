@@ -103,16 +103,25 @@ By default mining calls the `claude` CLI. To mine with anything else:
 ```jsonc
 // config.json
 "mining_backend": "command",
-"mining_command": "codex exec --sandbox read-only -"   // prompt on stdin, text on stdout
+"mining_command": ["codex", "exec", "--sandbox", "read-only", "-"],  // prompt on stdin, text on stdout
+"ack_command_backend": true   // REQUIRED: transcript excerpts go to this command
 ```
 
 Any command that reads the prompt from stdin and prints the model's reply to
-stdout works (`llm -m gpt-4o`, `ollama run llama3`, a curl script against any
-API). The engine's JSON parsing is fence/prose-tolerant and does one
-strict-JSON retry, so weaker models are handled. Trade-offs vs the claude_cli
-backend: no per-token usage accounting (calls are still counted; `max_usd_per_day`
-won't see costs, use `max_segments_per_run` as your cost knob), and no model
-fallback chain (your command is in charge).
+stdout works (`llm -m gpt-4o`, `ollama run llama3`, a script against any API).
+The engine's JSON parsing is fence/prose-tolerant and does one strict-JSON
+retry, so weaker models are handled. Notes:
+
+- **Explicit opt-in required.** The prompt contains transcript excerpts
+  (redacted by default, see the README privacy section); the engine refuses
+  the command backend until `ack_command_backend: true` is set.
+- **No shell.** The command runs via argv, never `shell=True`: configure it as
+  a JSON array (recommended) or a plain string that is shlex-split. Pipes and
+  redirects are not supported; wrap them in a script if you need them.
+- **Budgets:** no per-token usage accounting (calls are still counted).
+  `max_usd_per_day` cannot see costs on this backend and the engine logs a
+  warning if you set it; `max_segments_per_run` is your cost knob. No model
+  fallback chain (your command is in charge).
 
 ## 4. UI on other platforms/hosts
 

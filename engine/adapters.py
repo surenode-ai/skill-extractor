@@ -249,7 +249,13 @@ class CodexAdapter(Adapter):
         return ""
 
     def map_record(self, raw: dict) -> Optional[dict]:
-        payload = raw.get("payload") if raw.get("type") in ("response_item", "event_msg") else raw
+        rtype = raw.get("type")
+        # event_msg is a UI-convenience mirror of the response_item stream:
+        # mapping it would double-count content if a future Codex version
+        # emits message-shaped payloads there. session_meta is identity-only.
+        if rtype in ("event_msg", "session_meta"):
+            return None
+        payload = raw.get("payload") if rtype == "response_item" else raw
         if not isinstance(payload, dict):
             return None
         ptype = payload.get("type", "")

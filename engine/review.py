@@ -71,6 +71,7 @@ def cmd_list(args) -> None:
         "trace_outcome": c.get("trace_outcome"),
         "status": c.get("status"),
         "source": c.get("source"),
+        "risk": lib.risk_findings(c),
     } for c in items]
     print(json.dumps(slim, indent=2))
 
@@ -86,6 +87,19 @@ def cmd_install(args) -> None:
         print(json.dumps({"error": "not found", "id": args.id}))
         sys.exit(1)
     c = _apply_edits(dict(c), _load_edits(args.edits))
+    # A candidate is model output about to become a persistent agent
+    # instruction: risky instruction patterns require an explicit, per-install
+    # acknowledgement, not a skimmed click.
+    risks = lib.risk_findings(c)
+    if risks and not args.acknowledge_risk:
+        print(json.dumps({
+            "error": "risky",
+            "id": c["id"],
+            "risk": risks,
+            "hint": "review the body, then re-run install with --acknowledge-risk "
+                    "to accept these patterns",
+        }, indent=2))
+        sys.exit(3)
     path = lib.install_skill(c)
     lib.append_decision({
         "id": c["id"],
@@ -95,11 +109,14 @@ def cmd_install(args) -> None:
         "path": path,
         "comment": args.comment or "",
         "edited": bool(args.edits),
+        "risk": risks,
+        "risk_acknowledged": bool(risks),
         "score": c.get("score"),
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
     })
     lib.rebuild_pending()
-    print(json.dumps({"ok": True, "action": "install", "path": path, "name": c["name"]}, indent=2))
+    print(json.dumps({"ok": True, "action": "install", "path": path,
+                      "name": c["name"], "risk": risks}, indent=2))
 
 
 def cmd_reject(args) -> None:
@@ -152,7 +169,8 @@ def cmd_count(args) -> None:
 
 
 def cmd_export_pending(args) -> None:
-    print(json.dumps(lib.rebuild_pending(), indent=2))
+    items = [{**c, "risk": lib.risk_findings(c)} for c in lib.rebuild_pending()]
+    print(json.dumps(items, indent=2))
 
 
 def main() -> None:
@@ -161,7 +179,7 @@ def main() -> None:
 
     p = sub.add_parser("list"); p.add_argument("--all", action="store_true"); p.set_defaults(fn=cmd_list)
     p = sub.add_parser("show"); p.add_argument("id"); p.set_defaults(fn=cmd_show)
-    p = sub.add_parser("install"); p.add_argument("id"); p.add_argument("--edits"); p.add_argument("--comment"); p.set_defaults(fn=cmd_install)
+    p = sub.add_parser("install"); p.add_argument("id"); p.add_argument("--edits"); p.add_argument("--comment"); p.add_argument("--acknowledge-risk", action="store_true", help="install even though the risk lint flagged instruction patterns"); p.set_defaults(fn=cmd_install)
     p = sub.add_parser("reject"); p.add_argument("id"); p.add_argument("--comment"); p.set_defaults(fn=cmd_reject)
     p = sub.add_parser("edit"); p.add_argument("id"); p.add_argument("--edits", required=True); p.set_defaults(fn=cmd_edit)
     p = sub.add_parser("count"); p.set_defaults(fn=cmd_count)

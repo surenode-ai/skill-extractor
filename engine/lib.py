@@ -66,6 +66,8 @@ DEFAULT_CONFIG = {
     "exclude_projects": [],            # project-slug substrings to skip entirely
     "min_tool_calls": 2,               # a segment needs at least this much "doing" to be worth mining
     "surface_threshold": 0.55,         # composite score needed to move a candidate into `pending`
+    "redact_secrets": True,            # redact key/token/PII patterns from segments BEFORE the mining LLM sees them
+    "ack_command_backend": False,      # explicit opt-in required: the command backend sends transcript excerpts to the command you configure
 }
 
 
@@ -82,6 +84,22 @@ def load_config() -> dict:
 def ensure_dirs() -> None:
     for d in (STATE_DIR, LOG_DIR, SKILLS_DIR):
         os.makedirs(d, exist_ok=True)
+    # State may contain transcript-derived text; keep it private to the user
+    # even under a permissive umask.
+    for d in (STATE_ROOT, STATE_DIR, LOG_DIR):
+        try:
+            os.chmod(d, 0o700)
+        except OSError:
+            pass
+
+
+def _append_private(path: str, line: str) -> None:
+    """Append one line, creating the file 0600 (state can hold sensitive text)."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        os.write(fd, (line + "\n").encode("utf-8", errors="replace"))
+    finally:
+        os.close(fd)
 
 
 def macos_notify(title: str, message: str) -> None:
@@ -101,8 +119,7 @@ def log(msg: str) -> None:
     ensure_dirs()
     stamp = time.strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{stamp}] {msg}"
-    with open(LOG_FILE, "a") as fh:
-        fh.write(line + "\n")
+    _append_private(LOG_FILE, line)
     print(line)
 
 
@@ -480,6 +497,55 @@ REMINDER: Your ENTIRE reply must be a single valid JSON array (or []). No text
 before or after it. No markdown fences. Use double quotes for all strings."""
 
 
+# --------------------------------------------------------------------------- #
+# Secret redaction — runs BEFORE any segment text reaches a mining LLM.
+# Transcripts routinely contain pasted keys, .env dumps, and tokens in tool
+# output; the miner needs the shape of the work, never the secret values.
+# On by default (config "redact_secrets": false to disable — not recommended).
+# --------------------------------------------------------------------------- #
+_REDACTORS: list[tuple[str, "re.Pattern[str]", str]] = [
+    ("private-key",
+     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"),
+     "[redacted:private-key]"),
+    ("jwt",
+     re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
+     "[redacted:jwt]"),
+    ("aws-access-key",
+     re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
+     "[redacted:aws-access-key]"),
+    ("api-key",
+     re.compile(r"\bsk-(?:ant-)?[A-Za-z0-9_-]{20,}\b"),
+     "[redacted:api-key]"),
+    ("api-key",
+     re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"),
+     "[redacted:api-key]"),
+    ("token",
+     re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{22,}\b"),
+     "[redacted:token]"),
+    ("token",
+     re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),
+     "[redacted:token]"),
+    ("token",
+     re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._/+=-]{20,}"),
+     "Bearer [redacted:token]"),
+    ("secret",  # password embedded in a URL: scheme://user:secret@host
+     re.compile(r"://([^:@/\s]+):([^@/\s]+)@"),
+     r"://\1:[redacted:secret]@"),
+    ("env-secret",  # KEY=value lines for obviously-secret variable names
+     re.compile(r"(?im)^([A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_KEY|APIKEY|PRIVATE_KEY)[A-Z0-9_]*\s*=\s*)\S+"),
+     r"\1[redacted:env-secret]"),
+]
+
+
+def redact_text(text: str) -> tuple[str, int]:
+    """Return (redacted text, number of redactions applied)."""
+    total = 0
+    for _kind, rx, repl in _REDACTORS:
+        text, n = rx.subn(repl, text)
+        total += n
+    return text, total
+
+
 def render_mine_prompt(segment_text: str, learning: str) -> str:
     p = MINE_PROMPT
     for cat, meta in SKILL_CATEGORIES.items():
@@ -555,8 +621,7 @@ def append_usage_ledger(extra: dict) -> None:
     ensure_dirs()
     rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), **RUN_USAGE, **extra}
     rec["input_tokens"] = int(rec["input_tokens"]); rec["output_tokens"] = int(rec["output_tokens"])
-    with open(USAGE_FILE, "a") as fh:
-        fh.write(json.dumps(rec) + "\n")
+    _append_private(USAGE_FILE, json.dumps(rec))
 
 
 def usage_totals(since_prefix: str = "") -> dict:
@@ -585,20 +650,42 @@ def _call_command_backend(prompt: str, cfg: dict) -> Optional[str]:
     """Generic mining backend: run any LLM CLI (`mining_command` in config),
     prompt on stdin, model text on stdout. Makes the miner work with Codex
     (`codex exec ... -`), `llm`, `ollama run`, or anything else scriptable.
-    No token accounting (the CLI's envelope format is unknown) — the call is
-    still counted so budgets-by-calls keep working."""
+
+    Safety properties:
+    - Requires explicit opt-in (config ``ack_command_backend: true``): the
+      prompt contains transcript excerpts, and this backend sends them to
+      whatever command you configure.
+    - The command runs WITHOUT a shell. Configure it as an argv list
+      (recommended) or a plain string split with shlex; pipes/redirects are
+      not supported — wrap them in a script if you need them.
+    - No token accounting (the CLI's envelope format is unknown): the call is
+      still counted so budgets-by-calls keep working, but ``max_usd_per_day``
+      cannot see costs on this backend — ``max_segments_per_run`` is the cap.
+    """
     command = cfg.get("mining_command")
     if not command:
         return None
+    if not cfg.get("ack_command_backend", False):
+        log("  command backend refused: transcript excerpts would be sent to "
+            f"{command!r}. Set \"ack_command_backend\": true in config.json to "
+            "acknowledge this and enable it.")
+        return None
+    if isinstance(command, str):
+        import shlex
+        argv = shlex.split(command)
+    else:
+        argv = [str(a) for a in command]
+    if not argv:
+        return None
     try:
         proc = subprocess.run(
-            command, shell=True, input=prompt,
+            argv, shell=False, input=prompt,
             capture_output=True, text=True,
             timeout=cfg.get("mine_timeout_sec", 240),
             cwd=STATE_ROOT if os.path.isdir(STATE_ROOT) else HOME,
         )
-    except subprocess.TimeoutExpired:
-        log("  miner timeout (command backend)")
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        log(f"  miner failed (command backend): {exc!r}")
         return None
     if proc.returncode != 0:
         log(f"  miner exit {proc.returncode} (command backend): {proc.stderr[:300]}")
@@ -675,6 +762,10 @@ def mine_segment(seg: Segment, cfg: dict, learning: str = "") -> list[dict]:
     next model in the chain.
     """
     segment_text = seg.render(cfg["max_segment_chars"])
+    if cfg.get("redact_secrets", True):
+        segment_text, n_redacted = redact_text(segment_text)
+        if n_redacted:
+            log(f"  redacted {n_redacted} secret-like value(s) before mining")
     prompt = render_mine_prompt(segment_text, learning)
     for model in model_chain(cfg):
         out = _call_llm(prompt, model, cfg)
@@ -927,8 +1018,7 @@ def installed_skill_names() -> set[str]:
 
 def append_candidate(cand: dict) -> None:
     ensure_dirs()
-    with open(CANDIDATES_FILE, "a") as fh:
-        fh.write(json.dumps(cand) + "\n")
+    _append_private(CANDIDATES_FILE, json.dumps(cand))
 
 
 def read_candidates() -> list[dict]:
@@ -964,8 +1054,7 @@ def read_decisions() -> list[dict]:
 
 def append_decision(decision: dict) -> None:
     ensure_dirs()
-    with open(DECISIONS_FILE, "a") as fh:
-        fh.write(json.dumps(decision) + "\n")
+    _append_private(DECISIONS_FILE, json.dumps(decision))
 
 
 def decided_ids() -> set[str]:
@@ -1039,8 +1128,11 @@ def rebuild_pending() -> list[dict]:
 
 def _atomic_write(path: str, data: str) -> None:
     tmp = path + ".tmp"
-    with open(tmp, "w") as fh:
-        fh.write(data)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, data.encode("utf-8", errors="replace"))
+    finally:
+        os.close(fd)
     os.replace(tmp, path)
 
 
@@ -1053,11 +1145,60 @@ def slugify(name: str) -> str:
     return s or "mined-skill"
 
 
+# --------------------------------------------------------------------------- #
+# Pre-install risk lint. A mined skill is MODEL OUTPUT that becomes a
+# persistent agent instruction; before it is installed, flag instruction
+# patterns a reviewer should consciously accept, not skim past. Heuristic by
+# design: it surfaces risk, it does not certify safety.
+# --------------------------------------------------------------------------- #
+_RISK_PATTERNS: list[tuple[str, "re.Pattern[str]"]] = [
+    ("pipe-to-shell",
+     re.compile(r"(?i)\b(?:curl|wget)\b[^\n|;&]*\|\s*(?:sudo\s+)?(?:ba|z|da)?sh\b")),
+    ("encoded-exec",
+     re.compile(r"(?i)\bbase64\b[^\n]*\|\s*(?:ba|z|da)?sh\b|\beval\s*\(\s*atob")),
+    ("disables-safety",
+     re.compile(r"(?i)--no-verify|--dangerously|--disable-warnings\b|verify=False|"
+                r"StrictHostKeyChecking\s*=?\s*no|chmod\s+777|--allow-root")),
+    ("credential-access",
+     re.compile(r"(?i)(?:~|\$HOME)/\.(?:aws|ssh|gnupg|netrc|npmrc|pypirc|docker/config\.json)|"
+                r"\bid_rsa\b|\bcredentials?\.json\b|\.env\b[^\n]*(?:cat|read|print|send|upload)|"
+                r"(?:cat|less|head)\s+[^\n]*\.env\b")),
+    ("exfiltration",
+     re.compile(r"(?i)\b(?:curl|wget|http[s]?://)[^\n]*(?:-d|--data|--upload-file|-F )[^\n]*"
+                r"(?:\$\(|`|\$[A-Z_]|token|secret|key|passw)")),
+    ("hidden-persistence",
+     re.compile(r"(?i)\bcrontab\b|\blaunchctl\s+(?:load|bootstrap)\b|\bschtasks\s+/create\b|"
+                r"/etc/rc\.|\.bashrc\b|\.zshrc\b[^\n]*(?:>>|echo)")),
+    ("prompt-injection",
+     re.compile(r"(?i)ignore\s+(?:all\s+)?(?:previous|prior|earlier)\s+instructions|"
+                r"do\s+not\s+(?:tell|inform|mention\s+to)\s+the\s+user")),
+    ("broad-destructive",
+     re.compile(r"(?i)\brm\s+-rf\s+(?:/|~|\$HOME)\b|\bgit\s+push\s+--force\b[^\n]*\b(?:main|master)\b")),
+]
+
+
+def risk_findings(cand: dict) -> list[str]:
+    """Distinct risk labels found across the candidate's instruction fields."""
+    text = "\n".join(str(cand.get(k, "")) for k in
+                     ("name", "title", "description", "trigger", "body"))
+    hits: list[str] = []
+    for label, rx in _RISK_PATTERNS:
+        if rx.search(text) and label not in hits:
+            hits.append(label)
+    return hits
+
+
 def install_skill(cand: dict) -> str:
-    """Write the candidate as a SKILL.md. Returns the install path."""
+    """Write the candidate as a SKILL.md. Returns the install path.
+
+    Refuses to write through symlinks: a linked ``<slug>/`` or ``SKILL.md``
+    would let a prior local write redirect the install anywhere the user can
+    write."""
     ensure_dirs()
     name = slugify(cand.get("name", "mined-skill"))
     dest_dir = os.path.join(SKILLS_DIR, name)
+    if os.path.islink(dest_dir):
+        raise ValueError(f"refusing to install through symlinked dir: {dest_dir}")
     os.makedirs(dest_dir, exist_ok=True)
     desc = cand.get("description", cand.get("title", name)).replace("\n", " ").strip()
     body = cand.get("body", "").strip()
@@ -1083,6 +1224,12 @@ def install_skill(cand: dict) -> str:
         f"trace outcome {cand.get('trace_outcome','?')}). Review & edit as needed.*",
     ]
     path = os.path.join(dest_dir, "SKILL.md")
-    with open(path, "w") as fh:
-        fh.write("\n".join(front) + "\n")
+    if os.path.islink(path):
+        raise ValueError(f"refusing to write through symlink: {path}")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags, 0o600)
+    try:
+        os.write(fd, ("\n".join(front) + "\n").encode("utf-8", errors="replace"))
+    finally:
+        os.close(fd)
     return path

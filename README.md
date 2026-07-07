@@ -62,6 +62,40 @@ Sources are pluggable adapters (`engine/adapters.py`), enabled in `config.json`:
 
 All sources share one cursor, one segment budget, and one review queue.
 
+## What leaves your machine (privacy boundary)
+
+Transcripts are read and segmented **locally**. The only thing that leaves the
+process is the **mining prompt**: transcript excerpts (user messages, tool
+inputs/outputs) sent to the LLM backend you configure.
+
+- **Secret redaction is on by default** (`redact_secrets: true`): key, token,
+  and credential patterns (private keys, JWTs, AWS/API keys, bearer tokens,
+  `SECRET=`/`TOKEN=` env lines, URL-embedded passwords) are replaced with
+  `[redacted:...]` markers before any segment reaches a mining LLM.
+- The default backend is your local **`claude` CLI** (your existing Anthropic
+  session). Using **any other backend** (`mining_backend: "command"`) requires
+  an explicit acknowledgement in config (`ack_command_backend: true`), because
+  transcript excerpts will be piped to that command.
+- Use `scope` / `exclude_projects` to keep sensitive projects out of mining
+  entirely.
+- All state files (`candidates.jsonl`, `pending.json`, `decisions.jsonl`,
+  logs) are created `0600` in a `0700` directory.
+
+Redaction is pattern-based and best-effort: it targets unambiguous credential
+shapes, not every possible secret. Exclude projects you cannot afford to leak.
+
+## Installed skills are model output: the risk lint
+
+A mined skill is model-generated text that becomes a **persistent agent
+instruction** once installed. Besides your review, every install runs a risk
+lint over the skill body (pipe-to-shell bootstraps, credential-file access,
+disabled safety flags, exfiltration shapes, hidden persistence,
+prompt-injection phrasing, broad destructive commands). Flagged skills refuse
+to install until you explicitly acknowledge the findings (`--acknowledge-risk`
+on the CLI; a modal confirmation in the VS Code panel), and the
+acknowledgement is recorded in `decisions.jsonl`. The lint surfaces risk; it
+does not certify safety.
+
 ## Requirements
 
 - **Python 3.9+** (the engine is stdlib only, no pip installs)

@@ -25,5 +25,7 @@
   "mining_backend": "claude_cli",
   "mining_command": null,
   "codex_sessions_dir": null,
-  "jsonl_dirs": []
+  "jsonl_dirs": [],
+  "redact_secrets": true,
+  "ack_command_backend": false
 }

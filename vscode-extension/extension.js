@@ -161,7 +161,25 @@ function openPanel(context) {
     try {
       if (msg.type === "install") {
         const tmp = writeEdits(msg.edits);
-        const res = await review(["install", msg.id, "--edits", tmp, "--comment", msg.comment || ""]);
+        let res = await review(["install", msg.id, "--edits", tmp, "--comment", msg.comment || ""]);
+        if (res && res.error === "risky") {
+          // The risk lint flagged instruction patterns: require an explicit,
+          // modal acknowledgement before the skill becomes a live instruction.
+          const choice = await vscode.window.showWarningMessage(
+            `This skill body was flagged by the risk lint: ${(res.risk || []).join(", ")}. ` +
+            "Installing makes it a persistent agent instruction.",
+            { modal: true },
+            "Install anyway"
+          );
+          if (choice === "Install anyway") {
+            res = await review(["install", msg.id, "--edits", tmp,
+                                "--comment", msg.comment || "", "--acknowledge-risk"]);
+          } else {
+            fs.unlinkSync(tmp);
+            refreshPanel();
+            return;
+          }
+        }
         fs.unlinkSync(tmp);
         vscode.window.showInformationMessage(`Installed skill: ${res.name} → ${res.path}`);
         refreshPanel();
@@ -199,7 +217,12 @@ async function refreshPanel() {
 
 function renderHtml() {
   // The webview is a self-contained SPA; data arrives via postMessage.
+  // Nonce-based CSP: only our own script block runs; no remote loads, no
+  // inline event handlers (delegation via addEventListener below).
+  const nonce = require("crypto").randomBytes(16).toString("hex");
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
 <style>
   body { font-family: var(--vscode-font-family); color: var(--vscode-foreground);
          padding: 16px; font-size: 13px; }
@@ -231,11 +254,14 @@ function renderHtml() {
   .empty { color: var(--vscode-descriptionForeground); padding:40px 0; text-align:center; }
   details { margin-top:8px; } summary { cursor:pointer; color: var(--vscode-textLink-foreground); }
   .why { font-size:12px; color: var(--vscode-descriptionForeground); margin-top:6px; }
+  .risk { font-size:12px; margin-top:8px; padding:6px 10px; border-radius:4px;
+          background: var(--vscode-inputValidation-warningBackground, #7a5c00);
+          border: 1px solid var(--vscode-inputValidation-warningBorder, #b58900); }
 </style></head><body>
 <h1>🎓 Discovered Skills</h1>
 <div class="sub">Mined from your Claude Code traces. Review each candidate, edit if needed, then install or reject. Rejections are kept (with your comment) so mining improves over time.</div>
 <div id="list"><div class="empty">Loading…</div></div>
-<script>
+<script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
 function pct(x){ return Math.round((x||0)*100); }
 function esc(s){ return (s||"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
@@ -255,14 +281,15 @@ function render(items){
         <span class="badge">from \${esc((c.source||{}).project||"?")}</span>
       </div>
       \${c.outcome_reason ? '<div class="why">Why this score: '+esc(c.outcome_reason)+'</div>' : ''}
+      \${(c.risk||[]).length ? '<div class="risk">⚠ risk lint: '+c.risk.map(esc).join(", ")+' — installing will require an explicit acknowledgement</div>' : ''}
       <label>Name (skill id)</label><input class="f-name" value="\${esc(c.name)}">
       <label>Description (frontmatter — what & when)</label><input class="f-desc" value="\${esc(c.description)}">
       <label>Trigger (when to use)</label><input class="f-trigger" value="\${esc(c.trigger)}">
       <label>Body (the procedure)</label><textarea class="f-body">\${esc(c.body)}</textarea>
       <label>Comment (why you're installing / rejecting — optional)</label><input class="f-comment" placeholder="e.g. useful but renamed; or: too project-specific">
       <div class="row">
-        <button class="install" onclick="act('install','\${c.id}')">Install skill</button>
-        <button class="reject" onclick="act('reject','\${c.id}')">Reject</button>
+        <button class="install" data-act="install" data-id="\${esc(c.id)}">Install skill</button>
+        <button class="reject" data-act="reject" data-id="\${esc(c.id)}">Reject</button>
       </div>
     </div>\`;
   }).join("");
@@ -273,6 +300,11 @@ function act(type,id){
   const edits = { name:g('.f-name'), description:g('.f-desc'), trigger:g('.f-trigger'), body:g('.f-body') };
   vscode.postMessage({ type, id, edits, comment: g('.f-comment') });
 }
+// Event delegation instead of inline onclick (CSP forbids inline handlers).
+document.getElementById("list").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-act]");
+  if (btn) act(btn.dataset.act, btn.dataset.id);
+});
 window.addEventListener("message", e => { if(e.data.type==="data") render(e.data.items); });
 vscode.postMessage({ type:"refresh" });
 </script></body></html>`;

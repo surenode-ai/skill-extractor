@@ -44,26 +44,32 @@ cp "$REPO/vscode-extension/package.json" "$REPO/vscode-extension/extension.js" "
 echo "  ✓ installed VS Code extension -> $EXT_DIR (Reload Window to activate)"
 
 # 5) launchd periodic timer --------------------------------------------------
-cat > "$PLIST" <<PLISTEOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>$PLIST_LABEL</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>$PY</string>
-    <string>$ENGINE/extractor.py</string>
-  </array>
-  <key>StartInterval</key><integer>$INTERVAL</integer>
-  <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>$STATE_ROOT/logs/launchd.out.log</string>
-  <key>StandardErrorPath</key><string>$STATE_ROOT/logs/launchd.err.log</string>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>PATH</key><string>$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-  </dict>
-</dict></plist>
-PLISTEOF
+# Generated via plistlib (not string interpolation): paths and the interval are
+# data, so XML metacharacters in a path can neither break nor extend the plist,
+# and the interval is validated as a positive integer.
+"$PY" - "$PLIST" "$PLIST_LABEL" "$PY" "$ENGINE/extractor.py" "$STATE_ROOT" "$INTERVAL" "$HOME" <<'PYEOF'
+import plistlib, sys
+plist, label, py, extractor, state_root, interval, home = sys.argv[1:8]
+try:
+    interval = int(interval)
+    if interval <= 0:
+        raise ValueError
+except ValueError:
+    sys.exit(f"SKILL_EXTRACTOR_INTERVAL must be a positive integer, got: {interval!r}")
+data = {
+    "Label": label,
+    "ProgramArguments": [py, extractor],
+    "StartInterval": interval,
+    "RunAtLoad": True,
+    "StandardOutPath": f"{state_root}/logs/launchd.out.log",
+    "StandardErrorPath": f"{state_root}/logs/launchd.err.log",
+    "EnvironmentVariables": {
+        "PATH": f"{home}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
+    },
+}
+with open(plist, "wb") as fh:
+    plistlib.dump(data, fh)
+PYEOF
 
 launchctl unload "$PLIST" 2>/dev/null || true
 launchctl load "$PLIST"
