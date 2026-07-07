@@ -139,6 +139,41 @@ def test_install_skill_enforces_the_risk_gate_at_the_library_level(tmp_path, mon
     assert os.path.exists(lib.install_skill(clean))           # no ack needed
 
 
+def test_frontmatter_survives_yaml_metacharacters(tmp_path, monkeypatch):
+    """A colon or quote in a mined description must not break the SKILL.md
+    frontmatter: the description is emitted as a JSON string, which is a valid
+    YAML double-quoted scalar."""
+    import json as _json
+    monkeypatch.setattr(lib, "SKILLS_DIR", str(tmp_path / "skills"))
+    monkeypatch.setattr(lib, "STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setattr(lib, "LOG_DIR", str(tmp_path / "logs"))
+    monkeypatch.setattr(lib, "STATE_ROOT", str(tmp_path))
+
+    for desc in ('Use when error: timeout appears',
+                 'Prefer "explicit" configs: always',
+                 'Line with \\ backslash and #comment'):
+        path = lib.install_skill({"name": "meta test", "title": "t",
+                                  "description": desc, "body": "b"})
+        lines = open(path).read().splitlines()
+        dline = next(l for l in lines if l.startswith("description:"))
+        # The scalar round-trips exactly through a JSON (== YAML double-quoted) parse.
+        assert _json.loads(dline[len("description: "):]) == desc
+
+
+def test_worth_mining_conversation_path_requires_min_user_messages():
+    """config `min_user_messages` gates conversation-only mining (a single
+    instruction-like line is not an exchange worth an LLM call)."""
+    cfg = {**lib.DEFAULT_CONFIG, "min_user_messages": 2, "min_tool_calls": 2}
+    one = lib.Segment(project="p", session_id="s", index=0, events=[
+        lib.Event(role="user", text="Always run the tests before saying you are done.")])
+    assert lib.worth_mining(one, cfg) is False
+    two = lib.Segment(project="p", session_id="s", index=0, events=[
+        lib.Event(role="user", text="Always run the tests before saying you are done."),
+        lib.Event(role="assistant", text="Understood."),
+        lib.Event(role="user", text="Good, keep doing that from now on please.")])
+    assert lib.worth_mining(two, cfg) is True
+
+
 def test_append_private_retightens_preexisting_wide_files(tmp_path):
     """A log first created by shell redirection under umask 022 gets pulled
     back to 0600 on the first engine append."""

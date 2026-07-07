@@ -164,14 +164,14 @@ All commands print JSON to stdout; non-zero exit on not-found errors.
 
 | Command | Returns |
 |---|---|
-| `review.py list` | pending queue, slim records: `id,name,category,title,description,confidence,utility,composite,trace_outcome,status,source` |
+| `review.py list` | pending queue, slim records: `id,name,category,title,description,confidence,utility,composite,trace_outcome,status,source,risk` (`risk` = risk-lint labels, `[]` when clean) |
 | `review.py list --all` | every scratch candidate (full records) |
 | `review.py show <id>` | full candidate record (§5.2) |
-| `review.py install <id> [--edits FILE] [--comment STR]` | `{ok,action,path,name}` — writes SKILL.md, logs decision, rebuilds pending |
+| `review.py install <id> [--edits FILE] [--comment STR] [--acknowledge-risk]` | `{ok,action,path,name,risk}` — writes SKILL.md, logs decision, rebuilds pending. **Risk-flagged candidates refuse**: `{error:"risky",id,risk,hint}` with exit code `3` until re-run with `--acknowledge-risk` (show the findings to a human first; the acknowledgement is recorded in the decision) |
 | `review.py reject <id> [--comment STR]` | `{ok,action,id,comment}` — logs decision; candidate stays in scratch |
 | `review.py edit <id> --edits FILE` | `{ok,action,id}` — persist edits without installing |
 | `review.py count` | `{pending,scratch,installed,decided}` |
-| `review.py export-pending` | full pending records (what the popup renders) |
+| `review.py export-pending` | full pending records + `risk` labels (what the popup renders) |
 
 `--edits FILE` is JSON with any of `name,title,description,trigger,body,tags`.
 

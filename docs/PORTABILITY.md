@@ -52,8 +52,12 @@ systemctl --user daemon-reload && systemctl --user enable --now skill-extractor.
 
 ### Linux — cron (simpler)
 ```cron
-*/30 * * * * /usr/bin/python3 $HOME/skill-extractor/engine/extractor.py >> $HOME/.claude/skill-extractor/logs/cron.log 2>&1
+*/30 * * * * umask 077; /usr/bin/python3 $HOME/skill-extractor/engine/extractor.py >> $HOME/.claude/skill-extractor/logs/cron.log 2>&1
 ```
+
+The `umask 077` matters: extractor output can contain transcript-derived error
+text, and without it shell redirection creates `cron.log` world-readable under
+a default `022` umask (the engine's own state files are always `0600`).
 
 ### Windows — Task Scheduler
 ```bat

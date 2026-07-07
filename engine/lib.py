@@ -354,7 +354,9 @@ def worth_mining(seg: Segment, cfg: dict) -> bool:
     # OR the user is expressing standing instructions / ways-of-working — prime
     # preference ore even in short exchanges.
     user_texts = [e.text for e in seg.events if is_real_user_text(e)]
-    if not user_texts:
+    # Conversation-only mining needs a real exchange, not a single stray line
+    # (config `min_user_messages`, default 2).
+    if len(user_texts) < cfg.get("min_user_messages", 2):
         return False
     if sum(len(t) for t in user_texts) >= cfg.get("min_user_chars", 300):
         return True
@@ -1235,10 +1237,14 @@ def install_skill(cand: dict, acknowledge_risk: bool = False) -> str:
     body = cand.get("body", "").strip()
     trigger = cand.get("trigger", "").strip()
     score = cand.get("score", {})
+    # JSON-quote the description: a JSON string is a valid YAML double-quoted
+    # scalar, so colons/quotes in mined prose ("Use when error: timeout") can
+    # neither break the frontmatter nor inject keys. `name` is slugified to
+    # [a-z0-9-] and safe bare. Stdlib-only, so no yaml.safe_dump here.
     front = [
         "---",
         f"name: {name}",
-        f"description: {desc}",
+        f"description: {json.dumps(desc, ensure_ascii=False)}",
         "---",
         "",
         f"# {cand.get('title', name)}",
