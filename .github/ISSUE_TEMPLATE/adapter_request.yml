@@ -1,0 +1,22 @@
+name: Adapter request (RFA)
+description: Ask for a new trace-source adapter, or claim one to build
+labels: [adapter, help wanted]
+body:
+  - type: input
+    id: agent
+    attributes:
+      label: Which coding agent?
+      placeholder: Gemini CLI / opencode / Aider / ...
+    validations:
+      required: true
+  - type: textarea
+    id: format
+    attributes:
+      label: Where does it store sessions, and in what format?
+      description: Path on disk and a REDACTED sample record or two. This is most of the work of an adapter.
+  - type: checkboxes
+    id: claim
+    attributes:
+      label: Contribution
+      options:
+        - label: I want to build this adapter myself (see CONTRIBUTING.md, ~100 lines + tests)

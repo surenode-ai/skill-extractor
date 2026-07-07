@@ -1,0 +1,25 @@
+name: Bug report
+description: Something broke or behaved contrary to the docs
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: v0.4.0
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: OS and Python version
+      placeholder: macOS 15 / Python 3.12
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: What happened, and how to reproduce it
+      description: Commands run, expected vs actual. Strip transcript-derived content and secrets from logs before pasting.
+    validations:
+      required: true
