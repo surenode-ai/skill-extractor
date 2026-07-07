@@ -49,6 +49,7 @@ Three layers, each independently replaceable:
 
 > Building a UI on this pattern? Follow [REVIEW-CLIENTS.md](REVIEW-CLIENTS.md):
 > the webview/temp-file/risk-gate hygiene checklist the bundled panel follows.
+
 Run our extractor as-is (scheduler of your choice). Your app only:
 1. **Watches** `~/.claude/skill-extractor/state/pending.json` (poll or fs-watch)
    → show your own notification/UI when it changes.
