@@ -9,6 +9,32 @@ edit, or reject each one from a **VS Code panel** or the **`/review-skills`**
 command. Approved skills are written as real `SKILL.md` files; every candidate,
 approved or not, is kept so mining keeps improving.
 
+## Security model: read this before installing
+
+Be clear-eyed about what this tool is. It is a loop with three powerful parts:
+
+1. **It mines your private agent traces.** Your coding transcripts contain
+   your code, your infrastructure names, your mistakes, and sometimes pasted
+   secrets. This tool reads all of it.
+2. **It may send excerpts to a remote LLM.** Mining sends transcript excerpts
+   to the backend you configure. The default is your local `claude` CLI, which
+   means Anthropic's API. Secret redaction is on by default and pattern-based;
+   it catches unambiguous credential shapes, not every possible secret.
+   Projects you cannot afford to leak belong in `exclude_projects`, not in
+   trust that redaction is perfect.
+3. **Installed skills change your agent's future behavior.** A mined skill is
+   model output. Once installed it is a persistent instruction your agent will
+   follow in later sessions. The risk lint and the explicit-acknowledgement
+   gate exist because installing a skill is closer to merging code than to
+   dismissing a notification. Treat it that way.
+
+Private traces in, model in the middle, agent instructions out. The defaults
+are privacy-first (redaction on, local state `0600`/`0700`, no shell execution,
+opt-in required for non-default backends, risk-linted installs), but the loop
+is only as safe as your review of what you install and your choice of what to
+mine. Details: the privacy boundary and risk lint sections below, and
+[SECURITY.md](SECURITY.md).
+
 ## How it works
 
 ```
