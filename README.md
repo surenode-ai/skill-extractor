@@ -9,6 +9,40 @@ edit, or reject each one from a **VS Code panel** or the **`/review-skills`**
 command. Approved skills are written as real `SKILL.md` files; every candidate,
 approved or not, is kept so mining keeps improving.
 
+## Why this exists
+
+Every session with a coding agent produces two things: the work, and the
+knowledge of how the work got done. The work survives. The knowledge
+evaporates.
+
+You spend forty minutes with your agent finding why parallel tests are flaky,
+and the fix (bind test servers to port 0) is exactly the kind of thing that
+will be needed again, in another repo, three weeks from now, when neither you
+nor the agent remembers this session existed. You correct the agent for the
+fifth time: run the tests yourself before telling me it is done. That standing
+instruction lives in your patience, not in the agent. A failed approach taught
+you what to avoid; nothing wrote that down.
+
+Skills are the fix the ecosystem has converged on: durable `SKILL.md`
+instructions the agent loads in future sessions. But almost nobody writes
+them, for the same reason nobody writes documentation after the task is
+finished. You do not notice your own repeated patterns, and the moment the
+problem is solved, the incentive to write anything is gone.
+
+skill-extractor closes the loop with what you already have. Your transcripts
+are sitting on disk, containing the evidence of what worked and what did not.
+The miner reads them incrementally, extracts candidate skills (techniques,
+workflows, standing preferences, guardrails learned from failures), scores
+each by whether the trace it came from actually succeeded, and surfaces only
+the strong, novel ones for your review. You approve, edit, or reject. Approved
+skills make your agent better next session; rejections teach the miner your
+taste.
+
+The result: your agent compounds. Work you already did this week quietly
+becomes capability you keep. For one developer this is a compounding personal
+toolkit; for a team it is raw material for a shared, governed skill catalog
+(see [Using this on a team?](#using-this-on-a-team) below).
+
 ## Security model: read this before installing
 
 Be clear-eyed about what this tool is. It is a loop with three powerful parts:
