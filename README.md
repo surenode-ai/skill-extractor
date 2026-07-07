@@ -11,27 +11,25 @@ approved or not, is kept so mining keeps improving.
 
 ## Why I built skill-extractor
 
-I kept telling my coding agent the same things. Run the tests before you say
-it's done. Stop hardcoding ports in parallel test suites. Fixes we had already
-worked out together were gone by the next session. Skills solve exactly this,
-but writing a skill by hand after finishing a task is the kind of thing nobody
-actually does.
+I kept telling my coding agent the same things: run the tests before saying
+it's done, stop hardcoding ports in parallel test suites, reuse fixes we had
+already worked out. By the next session, those patterns were gone. Skills
+solve this, but writing one by hand after finishing a task is extra work most
+people skip.
 
-Agent platforms answer with built-in memory: the agent learns from your
-sessions and its behavior changes, and you don't see what it learned. I
-wouldn't have been able to sleep with that running over transcripts that
-contain my code, my infrastructure, and occasionally my pasted secrets.
+Agent platforms usually answer with built-in memory: the agent learns from
+your sessions, its behavior changes, and you don't see exactly what it
+learned. I didn't want that running over transcripts with my code,
+infrastructure details, and occasional pasted secrets.
 
-skill-extractor does the learning where you can watch it. The engine is 2,137
-lines of dependency-free Python in four files; you can read all of it in an
-afternoon. It runs on your machine, its state is plain JSONL you can `cat`,
-secrets are redacted before anything reaches a model, and nothing becomes a
-persistent instruction until it passes a risk lint and you approve it as a
-markdown file you can open, edit, or delete.
+skill-extractor makes that process visible. It runs on your machine, keeps
+state as plain JSONL, pattern-redacts secrets before anything reaches a model,
+and only installs a persistent instruction after risk lint and your approval.
+The result is a markdown skill you can open, edit, or delete.
 
-For one developer this is a toolkit that grows out of work you already did.
-For a team it is raw material for a shared, governed skill catalog (see
-[Using this on a team?](#using-this-on-a-team)).
+For one developer, it turns repeated fixes into reusable skills. For a team,
+it produces reviewable material for a
+[shared skill catalog](#using-this-on-a-team).
 
 ## Security model: read this before installing
 
