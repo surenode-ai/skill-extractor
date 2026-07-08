@@ -2,6 +2,11 @@
 
 [![ci](https://github.com/surenode-ai/skill-extractor/actions/workflows/ci.yml/badge.svg)](https://github.com/surenode-ai/skill-extractor/actions/workflows/ci.yml)
 
+![The review panel showing a real skill mined from the author's own sessions](docs/img/review-panel.png)
+
+*A real skill, mined from the author's own sessions. More in
+[examples/mined-skills](examples/mined-skills).*
+
 Mine **reusable skills** from your coding agents' transcripts. Works with
 **Claude Code**, **OpenAI Codex CLI**, and **any other agent** via a small
 exporter. Every candidate is scored by **confidence** and **utility**, weighted
@@ -51,6 +56,12 @@ discovered, `/review-skills` runs the same flow in Claude Code, and
 `python3 engine/review.py list` is the raw CLI. Interval, model, scope, and
 sources live in `config.json` (`SKILL_EXTRACTOR_INTERVAL=900 ./install.sh`
 changes the timer).
+
+**What it costs to run:** a mining pass makes at most `max_segments_per_run`
+model calls (default 8), and only for transcript content it has never seen.
+Idle runs make zero LLM calls, so the scheduled miner costs nothing while you
+are not working. With the default `claude` CLI backend the calls ride your
+existing Claude subscription; with ollama they are free.
 
 ## Security model: read this before installing
 
